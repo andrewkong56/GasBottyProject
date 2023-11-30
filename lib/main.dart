@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:gallery_saver/gallery_saver.dart';
+//import 'package:gallery_saver/gallery_saver.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
-void main() => runApp(MyApp());
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(MyApp());
+}
 
 class MyApp extends StatelessWidget {
   @override
@@ -155,31 +161,33 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _takePicture() async {
-    if (!_controller!.value.isInitialized) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: select a camera first.')),
-      );
-      return;
-    }
-    if (_controller!.value.isTakingPicture) {
-      return;
-    }
-    try {
-      final XFile? file = await _controller!.takePicture();
-      if (file != null) {
-        imagePath = file.path;
-        GallerySaver.saveImage(imagePath!).then((bool? success) {
-          setState(() {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Picture saved to gallery')),
-            );
-          });
-        });
-      }
-    } catch (e) {
-      print(e);
-    }
+  if (!_controller!.value.isInitialized) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: select a camera first.')),
+    );
+    return;
   }
+  if (_controller!.value.isTakingPicture) {
+    return;
+  }
+  try {
+    final XFile? file = await _controller!.takePicture();
+    if (file != null) {
+      final storageRef = FirebaseStorage.instance.ref();
+      final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.jpg");
+      await imageRef.putFile(File(file.path));
+      final downloadUrl = await imageRef.getDownloadURL();
+      setState(() {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Picture uploaded to Firebase')),
+        );
+      });
+    }
+  } catch (e) {
+    print(e);
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {
