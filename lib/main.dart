@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 //import 'package:gallery_saver/gallery_saver.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-
+import 'package:firebase_core/firebase_core.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
