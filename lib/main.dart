@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_core/firebase_core.dart';
 //import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -162,23 +164,39 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _takePicture() async {
+Future<void> _takePicture() async {
   if (!_controller!.value.isInitialized) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: select a camera first.')),
-    );
-    return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Error: select a camera first.')),
+  );
+  return;
   }
   if (_controller!.value.isTakingPicture) {
-    return;
+  return;
   }
   try {
     final XFile? file = await _controller!.takePicture();
     if (file != null) {
       final storageRef = FirebaseStorage.instance.ref();
-      final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.jpg");
+      final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.png");
       await imageRef.putFile(File(file.path));
       final downloadUrl = await imageRef.getDownloadURL();
+
+      final bytes = File(file.path).readAsBytesSync(); // convert image to base64
+      String imgBase64Str = base64Encode(bytes);
+
+    var data = jsonEncode({'image': imgBase64Str});
+      var url = Uri.parse('https://dwljoaahjk.execute-api.us-east-2.amazonaws.com/2/GasBottyLambda'); //API endpoint
+      var headers = {'Content-Type': 'application/json'};
+
+      var response = await http.post(url, body: data, headers: headers);
+      
+      if (response.statusCode == 200) {
+        var responseData = jsonDecode(response.body); //the reponse back
+      } else {
+        print('Failed to load post');
+      }
+
       setState(() {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Picture uploaded to Firebase')),
@@ -186,10 +204,9 @@ class _CameraScreenState extends State<CameraScreen> {
       });
     }
   } catch (e) {
-    print(e);
+  print(e);
   }
 }
-
 
   @override
   Widget build(BuildContext context) {
