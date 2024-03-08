@@ -139,6 +139,32 @@ class CameraScreen extends StatefulWidget {
   _CameraScreenState createState() => _CameraScreenState();
 }
 
+class DisplayScreen extends StatelessWidget {
+  final Map<String, dynamic> data;
+
+  DisplayScreen({Key? key, required this.data}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    // Converting the data into a more display-friendly format
+    List<Widget> dataWidgets = data.entries.map((entry) {
+      return ListTile(
+        title: Text(entry.key),
+        subtitle: Text(entry.value.toString()),
+      );
+    }).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Data Display'),
+      ),
+      body: ListView(
+        children: dataWidgets,
+      ),
+    );
+  }
+}
+
 class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
@@ -181,21 +207,42 @@ Future<void> _takePicture() async {
       final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.png");
       await imageRef.putFile(File(file.path));
       final downloadUrl = await imageRef.getDownloadURL();
-
+      String responseString = '''{'statusCode': 200, 'headers': {'Content-Type': '/'}, 'body': '{"Price":3.039,"Grade":"Regular","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Mid-Grade","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Regular","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Mid-Grade","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Premium","Cash\/Credit":"Cash"}\n{"Price":3.339,"Grade":"Premium","Cash\/Credit":"Credit"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Cash"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Credit"}\n'}''';
       final bytes = File(file.path).readAsBytesSync(); // convert image to base64
       String imgBase64Str = base64Encode(bytes);
 
-    var data = jsonEncode({'image': imgBase64Str});
+
+
+      final parsedJson = jsonDecode(responseString);
+      final bodyString = parsedJson['body'] as String;
+      final bodyLines = bodyString.split('\\n');
+      Map<String, dynamic> data = {};
+      for (var line in bodyLines) {
+        if (line.isNotEmpty) {
+          Map<String, dynamic> gasOption = jsonDecode(line);
+          data['${gasOption['Grade']} (${gasOption['Cash/Credit']})'] = gasOption['Price'];
+        }
+      }
+
+      // Navigate to the DisplayScreen with the parsed data
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (context) => DisplayScreen(data: data),
+      ));
+
+      
+      /*
+      var data = jsonEncode({'image': imgBase64Str});
       var url = Uri.parse('https://dwljoaahjk.execute-api.us-east-2.amazonaws.com/2/GasBottyLambda'); //API endpoint
       var headers = {'Content-Type': 'application/json'};
-
-      var response = await http.post(url, body: data, headers: headers);
+      
+      //var response = await http.post(url, body: data, headers: headers);
       
       if (response.statusCode == 200) {
         var responseData = jsonDecode(response.body); //the reponse back
       } else {
         print('Failed to load post');
-      }
+      }*/
+
 
       setState(() {
         ScaffoldMessenger.of(context).showSnackBar(
