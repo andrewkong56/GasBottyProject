@@ -134,35 +134,67 @@ class PriceMatchScreen extends StatelessWidget {
   }
 }
 
-class CameraScreen extends StatefulWidget {
+class ConfirmationScreen extends StatefulWidget {
+  final String responseString;
+
+  const ConfirmationScreen({Key? key, required this.responseString}) : super(key: key);
+
   @override
-  _CameraScreenState createState() => _CameraScreenState();
+  _ConfirmationScreenState createState() => _ConfirmationScreenState();
 }
 
-class DisplayScreen extends StatelessWidget {
-  final Map<String, dynamic> data;
-
-  DisplayScreen({Key? key, required this.data}) : super(key: key);
+class _ConfirmationScreenState extends State<ConfirmationScreen> {
+  List<Map<String, dynamic>> parsedGasPrices = [];
 
   @override
-  Widget build(BuildContext context) {
-    // Converting the data into a more display-friendly format
-    List<Widget> dataWidgets = data.entries.map((entry) {
-      return ListTile(
-        title: Text(entry.key),
-        subtitle: Text(entry.value.toString()),
-      );
-    }).toList();
+  void initState() {
+    super.initState();
+    parseAndHandleResponse(widget.responseString);
+  }
 
+  void parseAndHandleResponse(String response) {
+    // Assuming 'response' is the full string you're starting with
+    // Implement the parsing logic as described previously
+
+    // Example parsing logic (simplified for demonstration)
+    String bodyMarker = "'body': ";
+    int start = response.indexOf(bodyMarker) + bodyMarker.length;
+    int end = response.lastIndexOf("'}");
+    String bodyContent = response.substring(start + 1, end);
+
+    List<String> gasPrices = bodyContent.split(r"\n");
+
+    for (String price in gasPrices) {
+      if (price.isNotEmpty) {
+        Map<String, dynamic> gasOption = jsonDecode(price);
+        parsedGasPrices.add(gasOption);
+      }
+    }
+
+    setState(() {}); // Update the UI after parsing
+  }
+
+  @override
+Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Data Display'),
-      ),
-      body: ListView(
-        children: dataWidgets,
+      appBar: AppBar(title: const Text('Parsed Gas Prices')),
+      body: ListView.builder(
+        itemCount: parsedGasPrices.length,
+        itemBuilder: (BuildContext context, int index) {
+          String key = '${parsedGasPrices[index]["Grade"]} (${parsedGasPrices[index]["Cash/Credit"]})';
+          return ListTile(
+            title: Text(key),
+            subtitle: Text("\$${parsedGasPrices[index]["Price"].toString()}"),
+          );
+        },
       ),
     );
   }
+}
+
+class CameraScreen extends StatefulWidget {
+  @override
+  _CameraScreenState createState() => _CameraScreenState();
 }
 
 class _CameraScreenState extends State<CameraScreen> {
@@ -207,29 +239,15 @@ Future<void> _takePicture() async {
       final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.png");
       await imageRef.putFile(File(file.path));
       final downloadUrl = await imageRef.getDownloadURL();
-      String responseString = '''{'statusCode': 200, 'headers': {'Content-Type': '/'}, 'body': '{"Price":3.039,"Grade":"Regular","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Mid-Grade","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Regular","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Mid-Grade","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Premium","Cash\/Credit":"Cash"}\n{"Price":3.339,"Grade":"Premium","Cash\/Credit":"Credit"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Cash"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Credit"}\n'}''';
-      final bytes = File(file.path).readAsBytesSync(); // convert image to base64
-      String imgBase64Str = base64Encode(bytes);
-
-
-
-      final parsedJson = jsonDecode(responseString);
-      final bodyString = parsedJson['body'] as String;
-      final bodyLines = bodyString.split('\\n');
-      Map<String, dynamic> data = {};
-      for (var line in bodyLines) {
-        if (line.isNotEmpty) {
-          Map<String, dynamic> gasOption = jsonDecode(line);
-          data['${gasOption['Grade']} (${gasOption['Cash/Credit']})'] = gasOption['Price'];
-        }
-      }
-
-      // Navigate to the DisplayScreen with the parsed data
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (context) => DisplayScreen(data: data),
-      ));
-
+      String responseString = r'''{'statusCode': 200, 'headers': {'Content-Type': '/'}, 'body': '{"Price":3.039,"Grade":"Regular","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Mid-Grade","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Regular","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Mid-Grade","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Premium","Cash\/Credit":"Cash"}\n{"Price":3.339,"Grade":"Premium","Cash\/Credit":"Credit"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Cash"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Credit"}\n'}''';
       
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConfirmationScreen(responseString: responseString),
+        ),
+      );
+
       /*
       var data = jsonEncode({'image': imgBase64Str});
       var url = Uri.parse('https://dwljoaahjk.execute-api.us-east-2.amazonaws.com/2/GasBottyLambda'); //API endpoint
@@ -246,12 +264,15 @@ Future<void> _takePicture() async {
 
       setState(() {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Picture uploaded to Firebase')),
+          SnackBar(content: Text('Picture uploaded and data parsed')),
         );
       });
     }
   } catch (e) {
-  print(e);
+    print(e);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to take picture and parse data')),
+    );
   }
 }
 
