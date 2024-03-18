@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+//import 'package:path_provider/path_provider.dart';
 //import 'package:cloud_firestore/cloud_firestore.dart';
 //import 'package:gallery_saver/gallery_saver.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -9,6 +9,8 @@ import 'package:firebase_core/firebase_core.dart';
 //import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:image/image.dart' as image;
+import 'dart:typed_data';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,10 +155,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen> {
   }
 
   void parseAndHandleResponse(String response) {
-    // Assuming 'response' is the full string you're starting with
-    // Implement the parsing logic as described previously
-
-    // Example parsing logic (simplified for demonstration)
     String bodyMarker = "'body': ";
     int start = response.indexOf(bodyMarker) + bodyMarker.length;
     int end = response.lastIndexOf("'}");
@@ -237,16 +235,51 @@ Future<void> _takePicture() async {
     if (file != null) {
       final storageRef = FirebaseStorage.instance.ref();
       final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.png");
-      await imageRef.putFile(File(file.path));
-      final downloadUrl = await imageRef.getDownloadURL();
-      String responseString = r'''{'statusCode': 200, 'headers': {'Content-Type': '/'}, 'body': '{"Price":3.039,"Grade":"Regular","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Mid-Grade","Cash\/Credit":"Cash"}\n{"Price":3.139,"Grade":"Regular","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Mid-Grade","Cash\/Credit":"Credit"}\n{"Price":3.239,"Grade":"Premium","Cash\/Credit":"Cash"}\n{"Price":3.339,"Grade":"Premium","Cash\/Credit":"Credit"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Cash"}\n{"Price":3.399,"Grade":"Diesel","Cash\/Credit":"Credit"}\n'}''';
       
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ConfirmationScreen(responseString: responseString),
-        ),
-      );
+      Uint8List bytes = await File(file.path).readAsBytes();
+      image.Image originalImage = image.decodeImage(bytes) as image.Image;
+      image.Image resizedImage = image.copyResize(originalImage, width: 640, height: 640);
+      Uint8List resizedBytes = image.encodeJpg(resizedImage);
+      String base64Image = base64Encode(resizedBytes);
+      // image.Image decodedImage = image.decodeImage(fileBytes) as image.Image;
+      // image.Image thumbnail = image.copyResize(decodedImage, width: 640);
+      // List<int> resizedIntList = thumbnail.getBytes();
+
+      //File imageFile = File(file.path);
+      await imageRef.putFile(File(file.path));
+      //final downloadUrl = await imageRef.getDownloadURL();
+      var apiUri = Uri.parse('http://3.15.77.148:81/2015-03-31/functions/function/invocations'); //API
+      // List<int> imageBytes = await imageFile.readAsBytes();
+      // String base64Image = base64Encode(imageBytes);
+      String jsonData = jsonEncode({'image': base64Image});
+
+      // Set headers for the POST request
+      Map<String, String> headers = {
+        'Content-type': 'application/json',
+        'Accept': 'text/plain'
+      };
+      
+      http.Response response =
+      await http.post(apiUri, headers: headers, body: jsonData);
+      var responseString = response.body.toString();
+      print(responseString);
+      if (response.statusCode == 200) {
+        // Assuming the API returns a JSON response, we read and decode it
+        // var responseData = await response.stream.toBytes();
+        // var responseString = String.fromCharCodes(responseData);
+        // Handle the parsed JSON data
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ConfirmationScreen(responseString: responseString),
+          ),
+        );
+      } else {
+        print('Failed to upload image to the API');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image to the API')),
+        );
+      }
 
       /*
       var data = jsonEncode({'image': imgBase64Str});
