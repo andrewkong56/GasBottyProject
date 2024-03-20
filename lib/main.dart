@@ -155,21 +155,35 @@ class _ConfirmationScreenState extends State<ConfirmationScreen> {
   }
 
   void parseAndHandleResponse(String response) {
-    String bodyMarker = "'body': ";
-    int start = response.indexOf(bodyMarker) + bodyMarker.length;
-    int end = response.lastIndexOf("'}");
-    String bodyContent = response.substring(start + 1, end);
+  // This regex pattern looks for the JSON array inside the "body" string.
+  final RegExp pattern = RegExp(r'"body":\s*"(\[.*\])"');
 
-    List<String> gasPrices = bodyContent.split(r"\n");
+  // Apply the regex pattern to the response string.
+  final match = pattern.firstMatch(response);
 
-    for (String price in gasPrices) {
-      if (price.isNotEmpty) {
-        Map<String, dynamic> gasOption = jsonDecode(price);
-        parsedGasPrices.add(gasOption);
-      }
+  if (match != null) {
+    // Extract the JSON part from the match.
+    String jsonPart = match.group(1)!;
+
+    // Unescape the string to convert it to valid JSON.
+    jsonPart = jsonPart.replaceAll(r'\"', "").replaceAll(r'\\', '\\').replaceAll(r'\n', "");
+
+    try {
+      // Parse the JSON string.
+      List<dynamic> gasPrices = jsonDecode(jsonPart);
+
+      // Convert each dynamic object to a Map<String, dynamic>.
+      parsedGasPrices = gasPrices.map((price) => Map<String, dynamic>.from(price)).toList();
+
+      setState(() {}); // Refresh the UI with the new data.
+    } catch (e) {
+      // If there's an error parsing the JSON, print it to the console.
+      print('Error parsing JSON: $e');
     }
-
-    setState(() {}); // Update the UI after parsing
+    } else {
+      // If the regex didn't find a match, log an error.
+      print('Could not find the JSON in the response.');
+    }
   }
 
   @override
@@ -193,6 +207,7 @@ Widget build(BuildContext context) {
 class CameraScreen extends StatefulWidget {
   @override
   _CameraScreenState createState() => _CameraScreenState();
+  
 }
 
 class _CameraScreenState extends State<CameraScreen> {
@@ -205,7 +220,7 @@ class _CameraScreenState extends State<CameraScreen> {
     super.initState();
     _initCamera();
   }
-
+  
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras!.isNotEmpty) {
@@ -231,19 +246,51 @@ Future<void> _takePicture() async {
   return;
   }
   try {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must wait
+      builder: (BuildContext context) {
+        return Center(child: CircularProgressIndicator());
+      },
+    );
     final XFile? file = await _controller!.takePicture();
     if (file != null) {
+      //SAVE ORIGINAL IMAGE TO FIREBASE
       final storageRef = FirebaseStorage.instance.ref();
-      final imageRef = storageRef.child("images/${DateTime.now().millisecondsSinceEpoch}.png");
-      
+      final imageRef = storageRef.child("images/original/${DateTime.now().millisecondsSinceEpoch}.png");
+
+      int cropSize = 640;
       Uint8List bytes = await File(file.path).readAsBytes();
       image.Image originalImage = image.decodeImage(bytes) as image.Image;
-      image.Image resizedImage = image.copyResize(originalImage, width: 640, height: 640);
+
+      //CROP IMAGE TO MATCH BORDER
+      double scaleFactorX = originalImage.width / MediaQuery.of(context).size.width;
+      double scaleFactorY = originalImage.height / MediaQuery.of(context).size.height;
+      int cropWidth = (cropSize * scaleFactorX).toInt();
+      int cropHeight = (cropSize * scaleFactorY).toInt();
+      int offsetX = (originalImage.width - cropWidth) ~/ 2;
+      int offsetY = (originalImage.height - cropHeight) ~/ 2;
+      image.Image croppedImage = image.copyCrop(originalImage, x: offsetX, y: offsetY, width: cropWidth, height: cropHeight);
+      Uint8List pngBytes = image.encodePng(croppedImage);
+
+      //SAVE CROP IMAGE TO FIREBASE
+      final st = FirebaseStorage.instance.ref();
+      final i = st.child("images/cropped/cropped${DateTime.now().millisecondsSinceEpoch}.png");
+      await i.putData(pngBytes);
+      
+
+      image.Image resizedImage = image.copyResize(croppedImage, width: 640, height: 640);
       Uint8List resizedBytes = image.encodeJpg(resizedImage);
-      String base64Image = base64Encode(resizedBytes);
       // image.Image decodedImage = image.decodeImage(fileBytes) as image.Image;
       // image.Image thumbnail = image.copyResize(decodedImage, width: 640);
       // List<int> resizedIntList = thumbnail.getBytes();
+
+      //CODE TO SEND RESIZE IMAGE TO FIREBASE
+      final stor = FirebaseStorage.instance.ref();
+      final ima = stor.child("images/resized/resized_${DateTime.now().millisecondsSinceEpoch}.jpg");
+      await ima.putData(resizedBytes);
+
+      String base64Image = base64Encode(resizedBytes);
 
       //File imageFile = File(file.path);
       await imageRef.putFile(File(file.path));
@@ -262,8 +309,14 @@ Future<void> _takePicture() async {
       http.Response response =
       await http.post(apiUri, headers: headers, body: jsonData);
       var responseString = response.body.toString();
-      print(responseString);
+      //var decodedResponse = jsonDecode(responseString);
+
+      Navigator.of(context).pop(); // Dismiss the loading indicator
+
+
       if (response.statusCode == 200) {
+        print(responseString);
+
         // Assuming the API returns a JSON response, we read and decode it
         // var responseData = await response.stream.toBytes();
         // var responseString = String.fromCharCodes(responseData);
@@ -302,6 +355,7 @@ Future<void> _takePicture() async {
       });
     }
   } catch (e) {
+    Navigator.of(context).pop();
     print(e);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Failed to take picture and parse data')),
@@ -321,7 +375,22 @@ Future<void> _takePicture() async {
       body: Column(
         children: <Widget>[
           Expanded(
-            child: CameraPreview(_controller!),
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                CameraPreview(_controller!), // Camera Preview
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.red, // Color of the border
+                      width: 2, // Width of the border
+                    ),
+                  ),
+                  width: 600, // Width of the square
+                  height: 600, // Height of the square
+                ),
+              ],
+            ),
           ),
           SizedBox(
             width: double.infinity,
@@ -335,6 +404,7 @@ Future<void> _takePicture() async {
       ),
     );
   }
+
 
   @override
   void dispose() {
