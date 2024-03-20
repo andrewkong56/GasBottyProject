@@ -61,17 +61,17 @@ class MyHomePage extends StatelessWidget {
                   },
                   child: Text('Camera'),
                 ),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 50, vertical: 20),
-                    minimumSize: Size(200, 50),
-                  ),
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => PriceMatchScreen()));
-                  },
-                  child: Text('Price Match'),
-                ),
+                // SizedBox(height: 20),
+                // ElevatedButton(
+                //   style: ElevatedButton.styleFrom(
+                //     padding: EdgeInsets.symmetric(horizontal: 50, vertical: 20),
+                //     minimumSize: Size(200, 50),
+                //   ),
+                //   onPressed: () {
+                //     Navigator.push(context, MaterialPageRoute(builder: (context) => PriceMatchScreen()));
+                //   },
+                //   child: Text('Price Match'),
+                // ),
               ],
             ),
           ),
@@ -126,77 +126,57 @@ class SettingScreen extends StatelessWidget {
   }
 }
 
-class PriceMatchScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Price match')),
-      body: Center(child: Text('something')),
-    );
-  }
-}
+// class PriceMatchScreen extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: Text('Price match')),
+//       body: Center(child: Text('something')),
+//     );
+//   }
+// }
 
-class ConfirmationScreen extends StatefulWidget {
+class ConfirmationScreen extends StatelessWidget {
   final String responseString;
 
-  const ConfirmationScreen({Key? key, required this.responseString}) : super(key: key);
+  ConfirmationScreen({Key? key, required this.responseString}) : super(key: key);
 
   @override
-  _ConfirmationScreenState createState() => _ConfirmationScreenState();
-}
-
-class _ConfirmationScreenState extends State<ConfirmationScreen> {
-  List<Map<String, dynamic>> parsedGasPrices = [];
-
-  @override
-  void initState() {
-    super.initState();
-    parseAndHandleResponse(widget.responseString);
-  }
-
-  void parseAndHandleResponse(String response) {
-  // This regex pattern looks for the JSON array inside the "body" string.
-  final RegExp pattern = RegExp(r'"body":\s*"(\[.*\])"');
-
-  // Apply the regex pattern to the response string.
-  final match = pattern.firstMatch(response);
-
-  if (match != null) {
-    // Extract the JSON part from the match.
-    String jsonPart = match.group(1)!;
-
-    // Unescape the string to convert it to valid JSON.
-    jsonPart = jsonPart.replaceAll(r'\"', "").replaceAll(r'\\', '\\').replaceAll(r'\n', "");
-
-    try {
-      // Parse the JSON string.
-      List<dynamic> gasPrices = jsonDecode(jsonPart);
-
-      // Convert each dynamic object to a Map<String, dynamic>.
-      parsedGasPrices = gasPrices.map((price) => Map<String, dynamic>.from(price)).toList();
-
-      setState(() {}); // Refresh the UI with the new data.
-    } catch (e) {
-      // If there's an error parsing the JSON, print it to the console.
-      print('Error parsing JSON: $e');
+  Widget build(BuildContext context) {
+    //print(responseString);
+    var decodedResponse = jsonDecode(responseString);
+    var body = decodedResponse['body'];
+    //print(body);
+    var listbody = body.split('\n');
+    listbody.removeLast();
+    //print(listbody);
+    List<Map<String, dynamic>> entries = [];
+    for (var line in listbody){
+      line = line.substring(0, line.length-1);
+      print(line);
+      Map<String, dynamic> linedata = {};
+      var dataPoints = line.split(',');
+      //print(dataPoints);
+      linedata ['Price'] = dataPoints[0].split(':')[1].trim();
+      print(linedata);
+      linedata ['Grade'] = dataPoints[1].split(':')[1].trim();
+      print(linedata);
+      linedata ['Cash/Credit'] = dataPoints[2].split(':')[1].trim();
+      print(linedata);
+      entries.add(linedata);
     }
-    } else {
-      // If the regex didn't find a match, log an error.
-      print('Could not find the JSON in the response.');
-    }
-  }
-
-  @override
-Widget build(BuildContext context) {
+    print(entries);
     return Scaffold(
-      appBar: AppBar(title: const Text('Parsed Gas Prices')),
+      appBar: AppBar(
+        title: Text('Confirmation'),
+      ),
       body: ListView.builder(
-        itemCount: parsedGasPrices.length,
-        itemBuilder: (BuildContext context, int index) {
-          String key = '${parsedGasPrices[index]["Grade"]} (${parsedGasPrices[index]["Cash/Credit"]})';
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          var entry = entries[index];
           return ListTile(
-            title: Text(key),
-            subtitle: Text("\$${parsedGasPrices[index]["Price"].toString()}"),
+            title: Text('Price: ${entry['Price']}'),
+            subtitle: Text('Grade: ${entry['Grade']}, Cash/Credit: ${entry['Cash/Credit']}'),
           );
         },
       ),
@@ -285,7 +265,7 @@ Future<void> _takePicture() async {
       // image.Image thumbnail = image.copyResize(decodedImage, width: 640);
       // List<int> resizedIntList = thumbnail.getBytes();
 
-      //CODE TO SEND RESIZE IMAGE TO FIREBASE
+      //SAVE RESIZE IMAGE TO FIREBASE
       final stor = FirebaseStorage.instance.ref();
       final ima = stor.child("images/resized/resized_${DateTime.now().millisecondsSinceEpoch}.jpg");
       await ima.putData(resizedBytes);
@@ -309,14 +289,20 @@ Future<void> _takePicture() async {
       http.Response response =
       await http.post(apiUri, headers: headers, body: jsonData);
       var responseString = response.body.toString();
-      //var decodedResponse = jsonDecode(responseString);
-
+      print(responseString);
       Navigator.of(context).pop(); // Dismiss the loading indicator
-
-
+      // var decodedResponse = jsonDecode(responseString);
+      // //var test = decodedResponse['body'][0];
+      // var body = decodedResponse['body'];
+      // var test = jsonDecode(body);
+      // var listbody = body.split('\n');
+      // for (var price in listbody){
+      //   var entry = price.split(',');
+      //   print(entry);
+      // }
       if (response.statusCode == 200) {
-        print(responseString);
-
+        //print(test);
+        //print(responseString);
         // Assuming the API returns a JSON response, we read and decode it
         // var responseData = await response.stream.toBytes();
         // var responseString = String.fromCharCodes(responseData);
