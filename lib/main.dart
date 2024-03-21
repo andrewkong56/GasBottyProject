@@ -168,21 +168,16 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>{
   }
     
     var listbody = body.split('\n');
-    listbody.removeLast();
-    //print(listbody);
+    print(listbody);
+    //listbody.removeLast();
     List<Map<String, dynamic>> entries = [];
     for (var line in listbody){
       line = line.substring(0, line.length-1);
-      print(line);
       Map<String, dynamic> linedata = {};
       var dataPoints = line.split(',');
-      //print(dataPoints);
       linedata ['Price'] = dataPoints[0].split(':')[1].trim();
-      print(linedata);
       linedata ['Grade'] = dataPoints[1].split(':')[1].trim();
-      print(linedata);
       linedata ['Cash/Credit'] = dataPoints[2].split(':')[1].trim();
-      print(linedata);
       entries.add(linedata);
     }
     print(entries);
