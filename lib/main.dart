@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:io';
 //import 'package:path_provider/path_provider.dart';
-//import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 //import 'package:gallery_saver/gallery_saver.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_core/firebase_core.dart';
+
 //import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -53,7 +54,7 @@ class MyHomePage extends StatelessWidget {
                 SizedBox(height: 20),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 50, vertical: 20),
+                    padding: EdgeInsets.symmetric(horizontal: 70, vertical: 20),
                     minimumSize: Size(200, 50),
                   ),
                   onPressed: () {
@@ -136,17 +137,36 @@ class SettingScreen extends StatelessWidget {
 //   }
 // }
 
-class ConfirmationScreen extends StatelessWidget {
+class ConfirmationScreen extends StatefulWidget {
   final String responseString;
 
   ConfirmationScreen({Key? key, required this.responseString}) : super(key: key);
+  
+  @override
+  _ConfirmationScreenState createState() => _ConfirmationScreenState();
+}
+
+class _ConfirmationScreenState extends State<ConfirmationScreen>{
+  late List<Map<String, dynamic>> entries = [];
+  late List<TextEditingController> priceEdit;
+  late List<TextEditingController> gradeEdit;
+  late List<TextEditingController> cashCreditEdit;
 
   @override
   Widget build(BuildContext context) {
     //print(responseString);
-    var decodedResponse = jsonDecode(responseString);
+    var decodedResponse = jsonDecode(widget.responseString);
     var body = decodedResponse['body'];
     //print(body);
+    try{
+      body = body.replaceAll('"', "").trim();
+    } catch (e) {
+    print(e);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Server Failed, Value = Null')),
+    );
+  }
+    
     var listbody = body.split('\n');
     listbody.removeLast();
     //print(listbody);
@@ -174,12 +194,67 @@ class ConfirmationScreen extends StatelessWidget {
         itemCount: entries.length,
         itemBuilder: (context, index) {
           var entry = entries[index];
-          return ListTile(
-            title: Text('Price: ${entry['Price']}'),
-            subtitle: Text('Grade: ${entry['Grade']}, Cash/Credit: ${entry['Cash/Credit']}'),
-          );
+          return Padding(padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: <Widget>[
+              TextFormField(
+                //controller: priceEdit[index],
+                decoration: InputDecoration(labelText: 'Price'),
+                onChanged: (text) => entries[index]['Price'] = text,
+                initialValue: entries[index]['Price'],
+              ),
+              TextFormField(
+                //controller: gradeEdit[index],
+                decoration: InputDecoration(labelText: 'Grade'),
+                onChanged: (text) => entries[index]['Grade'] = text,
+                initialValue: entries[index]['Grade'],
+                ),
+              TextFormField(
+                //controller: cashCreditEdit[index],
+                decoration: InputDecoration(labelText: 'Cash/Credit'),
+                onChanged: (text) => entries[index]['Cash/Credit'] = text, 
+                initialValue: entries[index]['Cash/Credit'],
+              ),
+            ],
+          ),
+        );
         },
       ),
+       bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton(
+            onPressed: () async {
+              // This will be triggered when the button is pressed
+              // Create a reference to the Firestore collection
+              CollectionReference gasData = FirebaseFirestore.instance.collection('Gas Data');
+              try {
+                // Perform the upload to Firestore
+                for (var entry in entries) {
+                  await gasData.add({
+                    'Price': entry['Price'], 
+                    'Grade': entry['Grade'],
+                    'Cash/Credit': entry['Cash/Credit']
+                  });
+                }
+                // Show a success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Data submitted successfully')),
+                );
+              } catch (e) {
+                // If the upload fails, show an error message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to submit data')),
+                );
+              }
+            },
+            child: Text('Submit Data'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 50) // make the button full width
+            ),
+          ),
+        ),
+       ),  
     );
   }
 }
@@ -256,14 +331,10 @@ Future<void> _takePicture() async {
       //SAVE CROP IMAGE TO FIREBASE
       final st = FirebaseStorage.instance.ref();
       final i = st.child("images/cropped/cropped${DateTime.now().millisecondsSinceEpoch}.png");
-      await i.putData(pngBytes);
-      
+      await i.putData(pngBytes);  
 
       image.Image resizedImage = image.copyResize(croppedImage, width: 640, height: 640);
       Uint8List resizedBytes = image.encodeJpg(resizedImage);
-      // image.Image decodedImage = image.decodeImage(fileBytes) as image.Image;
-      // image.Image thumbnail = image.copyResize(decodedImage, width: 640);
-      // List<int> resizedIntList = thumbnail.getBytes();
 
       //SAVE RESIZE IMAGE TO FIREBASE
       final stor = FirebaseStorage.instance.ref();
@@ -271,13 +342,8 @@ Future<void> _takePicture() async {
       await ima.putData(resizedBytes);
 
       String base64Image = base64Encode(resizedBytes);
-
-      //File imageFile = File(file.path);
       await imageRef.putFile(File(file.path));
-      //final downloadUrl = await imageRef.getDownloadURL();
       var apiUri = Uri.parse('http://3.15.77.148:81/2015-03-31/functions/function/invocations'); //API
-      // List<int> imageBytes = await imageFile.readAsBytes();
-      // String base64Image = base64Encode(imageBytes);
       String jsonData = jsonEncode({'image': base64Image});
 
       // Set headers for the POST request
@@ -291,22 +357,8 @@ Future<void> _takePicture() async {
       var responseString = response.body.toString();
       print(responseString);
       Navigator.of(context).pop(); // Dismiss the loading indicator
-      // var decodedResponse = jsonDecode(responseString);
-      // //var test = decodedResponse['body'][0];
-      // var body = decodedResponse['body'];
-      // var test = jsonDecode(body);
-      // var listbody = body.split('\n');
-      // for (var price in listbody){
-      //   var entry = price.split(',');
-      //   print(entry);
-      // }
+
       if (response.statusCode == 200) {
-        //print(test);
-        //print(responseString);
-        // Assuming the API returns a JSON response, we read and decode it
-        // var responseData = await response.stream.toBytes();
-        // var responseString = String.fromCharCodes(responseData);
-        // Handle the parsed JSON data
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -319,20 +371,6 @@ Future<void> _takePicture() async {
           SnackBar(content: Text('Failed to upload image to the API')),
         );
       }
-
-      /*
-      var data = jsonEncode({'image': imgBase64Str});
-      var url = Uri.parse('https://dwljoaahjk.execute-api.us-east-2.amazonaws.com/2/GasBottyLambda'); //API endpoint
-      var headers = {'Content-Type': 'application/json'};
-      
-      //var response = await http.post(url, body: data, headers: headers);
-      
-      if (response.statusCode == 200) {
-        var responseData = jsonDecode(response.body); //the reponse back
-      } else {
-        print('Failed to load post');
-      }*/
-
 
       setState(() {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -390,7 +428,6 @@ Future<void> _takePicture() async {
       ),
     );
   }
-
 
   @override
   void dispose() {
